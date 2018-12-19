@@ -13,6 +13,8 @@
 ### Standard help text
 ###
 
+source .env
+
 if  [ "$1" = "-h" ] || [ "$1" = " -help" ] || [ "$1" = "--help" ]
 then 
 cat <<EOH
@@ -30,7 +32,7 @@ OPTIONS:
    search for query run-time:
    	cd single_queries-with-duration
 		grep 'SELECT * ... (your query)' * |head -1
-	cd ..
+	cd ${PATH_TO_RESULT}
 	grep xxNNNN md5sums-all
 		take md5sum and:
 	grep \$md5sum endergebnis
@@ -49,17 +51,20 @@ fi
 ### variables
 ###
 
-logfile=postgresql-9.3-main.log
+logfile="${PATH_TO_LOG}/postgresql-9.4-main.log"
 
 nr_queries=$(grep SELECT $logfile|wc -l)
 
-nr_renderings=$(grep "way,way_area,name" $logfile|grep exec|wc -l)
+# nr_renderings=$(grep "way,way_area,name" $logfile|grep exec|wc -l)
+nr_renderings=$(grep -E "\) (landuse|waterway|water|aeroway|building|road|admin_|country_label|place_label|poi_label|AS road_label)" $logfile | wc -l)
 
 echo "analyzing $logfile: „$nr_queries“ SQL queries, „$nr_renderings“ mapnik renderings found"
 
 ###
 ### working part
 ###
+
+cd $PATH_TO_RESULT
 
 # make queries all the same, rm coordinates and logging timestamps 
 #cat $logfile|sed 's/BOX3D.*box3d//g' > without-coords
@@ -69,11 +74,11 @@ cat $logfile|sed 's/^.*CET LOG:  duration: //g' > without_timestamp
 #split up these normalized queries into single files with query-durations
 if [ -d single_queries-with-duration ]; then rm -rf single_queries-with-duration; fi
 mkdir single_queries-with-duration/; cd single_queries-with-duration/
-csplit --quiet -n 5 ../without_timestamp '/: SELECT/' '{*}'
+csplit --quiet -n 5 $PATH_TO_RESULT/without_timestamp '/: SELECT/' '{*}'
 rm xx00000
-echo -n > ../query-durations
-for i in x*; do head -1 $i |cut -f 1 -d" " >> ../query-durations; done # auf dateien, wo timestamps noch drin sind
-cd ..
+echo -n > $PATH_TO_RESULT/query-durations
+for i in x*; do head -1 $i |cut -f 1 -d" " >> $PATH_TO_RESULT/query-durations; done # auf dateien, wo timestamps noch drin sind
+cd $PATH_TO_RESULT
 
 echo "done split up time-count queries into „$nr_queries“ files"
 
@@ -82,8 +87,8 @@ cp -r single_queries-with-duration/ single_queries-without-duration/
 
 cd single_queries-without-duration/
 for i in `ls x*`; do sed -i -e 's/^.* ms  //g' -e 's/BOX3D.*box3d//g' $i; done # remove dauer-pro-query und BBOX zum finden gleicher queries
-md5sum x* > ../md5sums-all
-cd ..
+md5sum x* > $PATH_TO_RESULT/md5sums-all
+cd $PATH_TO_RESULT
 
 echo "done split up normalized queries into „$nr_queries“ files"
 
@@ -104,20 +109,20 @@ echo "done extracting query_run_times"
 if [ -d sums_runtime ]; then rm -rf sums_runtime; fi
 mkdir sums_runtime
 cd query_run_times/ 
-for i in `ls *`; do awk '{a+=$0}END{print a}' $i > ../sums_runtime/$i.sum; done
-cd .. 
+for i in `ls *`; do awk '{a+=$0}END{print a}' $i > $PATH_TO_RESULT/sums_runtime/$i.sum; done
+cd $PATH_TO_RESULT 
 echo "done summation of query run times"
 
 #how often this query is executed
 if [ -d query_counts ]; then rm -rf query_counts; fi
 mkdir query_counts
 cd query_run_times/ 
-for i in `ls *`; do wc -l $i > ../query_counts/$i.lines; done
-cd ..
+for i in `ls *`; do wc -l $i > $PATH_TO_RESULT/query_counts/$i.lines; done
+cd $PATH_TO_RESULT
 
 cd query_counts/
 for i in `ls *`; do sed -i 's/ .*$//' $i; done # wc puts filename after count, rm it
-cd ..
+cd $PATH_TO_RESULT
 echo "done counting of query runs"
 
 # calculate durchschnittliche laufzeit pro einzelner query
